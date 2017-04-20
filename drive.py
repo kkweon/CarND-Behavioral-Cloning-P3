@@ -15,6 +15,7 @@ from io import BytesIO
 from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
+from model import crop_resize
 
 sio = socketio.Server()
 app = Flask(__name__)
@@ -44,8 +45,9 @@ class SimplePIController:
 
 
 controller = SimplePIController(0.1, 0.002)
-set_speed = 9
+set_speed = 25
 controller.set_desired(set_speed)
+
 
 
 @sio.on('telemetry')
@@ -61,6 +63,7 @@ def telemetry(sid, data):
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
         image_array = np.asarray(image)
+        image_array = crop_resize(image_array)
         steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))
@@ -96,18 +99,15 @@ def send_control(steering_angle, throttle):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Remote Driving')
-    parser.add_argument(
-        'model',
-        type=str,
-        help='Path to model h5 file. Model should be on the same path.'
-    )
-    parser.add_argument(
-        'image_folder',
-        type=str,
-        nargs='?',
-        default='',
-        help='Path to image folder. This is where the images from the run will be saved.'
-    )
+    parser.add_argument('model',
+                        type=str,
+                        help='Path to model h5 file. Model should be on the same path.')
+
+    parser.add_argument('image_folder',
+                        type=str,
+                        nargs='?',
+                        default='',
+                        help='Path to image folder. This is where the images from the run will be saved.')
     args = parser.parse_args()
 
     # check that model Keras version is same as local Keras version
@@ -123,12 +123,16 @@ if __name__ == '__main__':
 
     if args.image_folder != '':
         print("Creating image folder at {}".format(args.image_folder))
+
         if not os.path.exists(args.image_folder):
             os.makedirs(args.image_folder)
+
         else:
             shutil.rmtree(args.image_folder)
             os.makedirs(args.image_folder)
+
         print("RECORDING THIS RUN ...")
+
     else:
         print("NOT RECORDING THIS RUN ...")
 
